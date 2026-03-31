@@ -143,3 +143,9 @@
 - [x] Implement dark/light theme toggle
 - [x] Add theme persistence to localStorage
 - [x] Create ThemeToggle component in header
+
+
+## Bug Fixes
+- [x] Fix FORBIDDEN error when user tries to access admin panel (user promoted to admin role)
+
+- [x] Set Century Gothic as default font family (Raleway + Century Gothic fallback)
