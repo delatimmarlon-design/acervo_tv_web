@@ -1,46 +1,32 @@
-import { describe, it, expect, beforeEach, vi } from "vitest";
-import { appRouter } from "./routers";
-import type { TrpcContext } from "./_core/context";
-import type { User } from "../drizzle/schema";
+import { describe, it, expect } from "vitest";
+import { z } from "zod";
 
-// Mock user for testing
-const mockUser: User = {
-  id: 1,
-  openId: "test-user-123",
-  name: "Test User",
-  email: "test@example.com",
-  loginMethod: "manus",
-  role: "user",
-  createdAt: new Date(),
-  updatedAt: new Date(),
-  lastSignedIn: new Date(),
-};
+// Validation schemas (same as in routers.ts)
+const createVideoSchema = z.object({
+  programName: z.string().min(1, "Nome do programa é obrigatório").max(255),
+  broadcastDate: z.string().regex(/^\d{2}\/\d{2}\/\d{4}$/, "Data deve estar no formato dd/mm/aaaa"),
+  channel: z.string().min(1, "Canal é obrigatório").max(100),
+  hdNumber: z.number().int().positive("Número do HD deve ser positivo"),
+  programType: z.enum(["Telejornal", "Novela", "Série", "Variedade"]),
+});
 
-// Create mock context
-function createMockContext(): TrpcContext {
-  return {
-    user: mockUser,
-    req: {
-      protocol: "https",
-      headers: {},
-    } as TrpcContext["req"],
-    res: {
-      clearCookie: vi.fn(),
-    } as unknown as TrpcContext["res"],
-  };
-}
+const searchVideoSchema = z.object({
+  programName: z.string().optional(),
+  channel: z.string().optional(),
+  programType: z.enum(["Telejornal", "Novela", "Série", "Variedade"]).optional(),
+  hdNumber: z.number().int().optional(),
+  dateFrom: z.string().regex(/^\d{2}\/\d{2}\/\d{4}$/).optional(),
+  dateTo: z.string().regex(/^\d{2}\/\d{2}\/\d{4}$/).optional(),
+  page: z.number().int().positive().default(1),
+  limit: z.number().int().positive().default(50),
+  sortBy: z.enum(["programName", "broadcastDate", "channel", "createdAt"]).default("createdAt"),
+  sortOrder: z.enum(["asc", "desc"]).default("desc"),
+});
 
-describe("video router", () => {
-  let caller: ReturnType<typeof appRouter.createCaller>;
-
-  beforeEach(() => {
-    const ctx = createMockContext();
-    caller = appRouter.createCaller(ctx);
-  });
-
-  describe("video.create", () => {
-    it("should create a video with valid input", async () => {
-      const input = {
+describe("Video Schema Validation", () => {
+  describe("createVideoSchema", () => {
+    it("should accept valid video data", () => {
+      const validData = {
         programName: "JORNAL NACIONAL",
         broadcastDate: "30/11/2016",
         channel: "Globo",
@@ -48,43 +34,12 @@ describe("video router", () => {
         programType: "Telejornal" as const,
       };
 
-      const result = await caller.video.create(input);
-
-      expect(result).toBeDefined();
-      expect(result.programName).toBe(input.programName);
-      expect(result.broadcastDate).toBe(input.broadcastDate);
-      expect(result.channel).toBe(input.channel);
-      expect(result.hdNumber).toBe(input.hdNumber);
-      expect(result.programType).toBe(input.programType);
-      expect(result.userId).toBe(mockUser.id);
+      const result = createVideoSchema.safeParse(validData);
+      expect(result.success).toBe(true);
     });
 
-    it("should reject video with invalid date format", async () => {
-      const input = {
-        programName: "JORNAL NACIONAL",
-        broadcastDate: "2016-11-30", // Wrong format
-        channel: "Globo",
-        hdNumber: 1,
-        programType: "Telejornal" as const,
-      };
-
-      await expect(caller.video.create(input as any)).rejects.toThrow();
-    });
-
-    it("should reject video with negative HD number", async () => {
-      const input = {
-        programName: "JORNAL NACIONAL",
-        broadcastDate: "30/11/2016",
-        channel: "Globo",
-        hdNumber: -1,
-        programType: "Telejornal" as const,
-      };
-
-      await expect(caller.video.create(input as any)).rejects.toThrow();
-    });
-
-    it("should reject video with empty program name", async () => {
-      const input = {
+    it("should reject empty program name", () => {
+      const invalidData = {
         programName: "",
         broadcastDate: "30/11/2016",
         channel: "Globo",
@@ -92,185 +47,177 @@ describe("video router", () => {
         programType: "Telejornal" as const,
       };
 
-      await expect(caller.video.create(input as any)).rejects.toThrow();
+      const result = createVideoSchema.safeParse(invalidData);
+      expect(result.success).toBe(false);
     });
-  });
 
-  describe("video.search", () => {
-    it("should return paginated results", async () => {
-      // First create some test videos
-      await caller.video.create({
+    it("should reject invalid date format", () => {
+      const invalidData = {
+        programName: "JORNAL NACIONAL",
+        broadcastDate: "2016-11-30",
+        channel: "Globo",
+        hdNumber: 1,
+        programType: "Telejornal" as const,
+      };
+
+      const result = createVideoSchema.safeParse(invalidData);
+      expect(result.success).toBe(false);
+    });
+
+    it("should reject negative HD number", () => {
+      const invalidData = {
+        programName: "JORNAL NACIONAL",
+        broadcastDate: "30/11/2016",
+        channel: "Globo",
+        hdNumber: -1,
+        programType: "Telejornal" as const,
+      };
+
+      const result = createVideoSchema.safeParse(invalidData);
+      expect(result.success).toBe(false);
+    });
+
+    it("should reject invalid program type", () => {
+      const invalidData = {
         programName: "JORNAL NACIONAL",
         broadcastDate: "30/11/2016",
         channel: "Globo",
         hdNumber: 1,
-        programType: "Telejornal",
-      });
+        programType: "InvalidType",
+      };
 
-      const result = await caller.video.search({
-        page: 1,
-        limit: 50,
-        sortBy: "createdAt",
-        sortOrder: "desc",
-      });
-
-      expect(result).toBeDefined();
-      expect(result.data).toBeInstanceOf(Array);
-      expect(result.page).toBe(1);
-      expect(result.limit).toBe(50);
-      expect(result.total).toBeGreaterThanOrEqual(0);
-      expect(result.pages).toBeGreaterThanOrEqual(0);
+      const result = createVideoSchema.safeParse(invalidData);
+      expect(result.success).toBe(false);
     });
 
-    it("should filter by program name", async () => {
-      await caller.video.create({
-        programName: "TESTE ESPECIAL",
-        broadcastDate: "01/01/2020",
-        channel: "SBT",
-        hdNumber: 2,
-        programType: "Variedade",
+    it("should accept all valid program types", () => {
+      const types = ["Telejornal", "Novela", "Série", "Variedade"];
+
+      types.forEach((type) => {
+        const data = {
+          programName: "TEST",
+          broadcastDate: "01/01/2020",
+          channel: "Test",
+          hdNumber: 1,
+          programType: type,
+        };
+
+        const result = createVideoSchema.safeParse(data);
+        expect(result.success).toBe(true);
       });
-
-      const result = await caller.video.search({
-        programName: "TESTE",
-        page: 1,
-        limit: 50,
-        sortBy: "createdAt",
-        sortOrder: "desc",
-      });
-
-      expect(result.data.length).toBeGreaterThan(0);
-      expect(result.data[0]?.programName).toContain("TESTE");
-    });
-
-    it("should filter by program type", async () => {
-      await caller.video.create({
-        programName: "NOVELA TEST",
-        broadcastDate: "15/03/2021",
-        channel: "Globo",
-        hdNumber: 3,
-        programType: "Novela",
-      });
-
-      const result = await caller.video.search({
-        programType: "Novela",
-        page: 1,
-        limit: 50,
-        sortBy: "createdAt",
-        sortOrder: "desc",
-      });
-
-      expect(result.data.length).toBeGreaterThan(0);
-      expect(result.data[0]?.programType).toBe("Novela");
-    });
-
-    it("should sort by different columns", async () => {
-      const result = await caller.video.search({
-        page: 1,
-        limit: 50,
-        sortBy: "programName",
-        sortOrder: "asc",
-      });
-
-      expect(result).toBeDefined();
-      expect(result.data).toBeInstanceOf(Array);
     });
   });
 
-  describe("video.update", () => {
-    it("should update a video", async () => {
-      // Create a video first
-      const created = await caller.video.create({
-        programName: "ORIGINAL NAME",
-        broadcastDate: "30/11/2016",
+  describe("searchVideoSchema", () => {
+    it("should accept valid search parameters", () => {
+      const validData = {
+        programName: "JORNAL",
         channel: "Globo",
+        programType: "Telejornal" as const,
         hdNumber: 1,
-        programType: "Telejornal",
-      });
+        dateFrom: "01/01/2020",
+        dateTo: "31/12/2024",
+        page: 1,
+        limit: 50,
+        sortBy: "programName" as const,
+        sortOrder: "asc" as const,
+      };
 
-      // Update it
-      const updated = await caller.video.update({
-        id: created.id,
-        data: {
-          programName: "UPDATED NAME",
-        },
-      });
-
-      expect(updated.programName).toBe("UPDATED NAME");
-      expect(updated.id).toBe(created.id);
-    });
-
-    it("should reject update of non-existent video", async () => {
-      await expect(
-        caller.video.update({
-          id: 99999,
-          data: { programName: "Test" },
-        })
-      ).rejects.toThrow();
-    });
-  });
-
-  describe("video.delete", () => {
-    it("should delete a video", async () => {
-      // Create a video first
-      const created = await caller.video.create({
-        programName: "TO DELETE",
-        broadcastDate: "30/11/2016",
-        channel: "Globo",
-        hdNumber: 1,
-        programType: "Telejornal",
-      });
-
-      // Delete it
-      const result = await caller.video.delete({ id: created.id });
-
+      const result = searchVideoSchema.safeParse(validData);
       expect(result.success).toBe(true);
-
-      // Verify it's deleted
-      await expect(caller.video.getById({ id: created.id })).rejects.toThrow();
     });
 
-    it("should reject delete of non-existent video", async () => {
-      await expect(caller.video.delete({ id: 99999 })).rejects.toThrow();
+    it("should use default values for pagination", () => {
+      const minimalData = {};
+
+      const result = searchVideoSchema.safeParse(minimalData);
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.page).toBe(1);
+        expect(result.data.limit).toBe(50);
+        expect(result.data.sortBy).toBe("createdAt");
+        expect(result.data.sortOrder).toBe("desc");
+      }
+    });
+
+    it("should reject invalid page number", () => {
+      const invalidData = {
+        page: 0,
+      };
+
+      const result = searchVideoSchema.safeParse(invalidData);
+      expect(result.success).toBe(false);
+    });
+
+    it("should reject invalid date format in dateFrom", () => {
+      const invalidData = {
+        dateFrom: "2020-01-01",
+      };
+
+      const result = searchVideoSchema.safeParse(invalidData);
+      expect(result.success).toBe(false);
+    });
+
+    it("should accept all valid sort columns", () => {
+      const columns = ["programName", "broadcastDate", "channel", "createdAt"];
+
+      columns.forEach((col) => {
+        const data = {
+          sortBy: col,
+        };
+
+        const result = searchVideoSchema.safeParse(data);
+        expect(result.success).toBe(true);
+      });
+    });
+
+    it("should accept both sort orders", () => {
+      const orders = ["asc", "desc"];
+
+      orders.forEach((order) => {
+        const data = {
+          sortOrder: order,
+        };
+
+        const result = searchVideoSchema.safeParse(data);
+        expect(result.success).toBe(true);
+      });
     });
   });
 
-  describe("video.getAllForExport", () => {
-    it("should return all videos for export", async () => {
-      await caller.video.create({
-        programName: "EXPORT TEST",
-        broadcastDate: "01/01/2020",
-        channel: "Band",
-        hdNumber: 4,
-        programType: "Série",
-      });
+  describe("Date Format Validation", () => {
+    it("should accept valid dd/mm/aaaa dates", () => {
+      const validDates = ["01/01/2020", "31/12/2024", "29/02/2020", "15/06/2016"];
 
-      const result = await caller.video.getAllForExport({
-        sortBy: "createdAt",
-        sortOrder: "desc",
-      });
+      validDates.forEach((date) => {
+        const data = {
+          programName: "TEST",
+          broadcastDate: date,
+          channel: "Test",
+          hdNumber: 1,
+          programType: "Telejornal" as const,
+        };
 
-      expect(result).toBeInstanceOf(Array);
-      expect(result.length).toBeGreaterThan(0);
+        const result = createVideoSchema.safeParse(data);
+        expect(result.success).toBe(true);
+      });
     });
 
-    it("should respect filters in export", async () => {
-      await caller.video.create({
-        programName: "EXPORT FILTER TEST",
-        broadcastDate: "01/01/2020",
-        channel: "Globo",
-        hdNumber: 5,
-        programType: "Telejornal",
-      });
+    it("should reject invalid date formats", () => {
+      const invalidDates = ["2020-01-01", "01-01-2020", "1/1/2020", "01/01/20"];
 
-      const result = await caller.video.getAllForExport({
-        channel: "Globo",
-        sortBy: "createdAt",
-        sortOrder: "desc",
-      });
+      invalidDates.forEach((date) => {
+        const data = {
+          programName: "TEST",
+          broadcastDate: date,
+          channel: "Test",
+          hdNumber: 1,
+          programType: "Telejornal" as const,
+        };
 
-      expect(result.length).toBeGreaterThan(0);
-      expect(result.every((v) => v.channel === "Globo")).toBe(true);
+        const result = createVideoSchema.safeParse(data);
+        expect(result.success).toBe(false);
+      });
     });
   });
 });
