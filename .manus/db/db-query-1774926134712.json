@@ -1,0 +1,9 @@
+{
+  "query": "\n-- Disable foreign key checks temporarily\nSET FOREIGN_KEY_CHECKS = 0;\n\n-- Delete all data from tables\nDELETE FROM importAlerts;\nDELETE FROM programSchedules;\nDELETE FROM userPermissions;\nDELETE FROM userInvitations;\nDELETE FROM videos;\nDELETE FROM users;\n\n-- Reset auto-increment counters\nALTER TABLE importAlerts AUTO_INCREMENT = 1;\nALTER TABLE programSchedules AUTO_INCREMENT = 1;\nALTER TABLE userPermissions AUTO_INCREMENT = 1;\nALTER TABLE userInvitations AUTO_INCREMENT = 1;\nALTER TABLE videos AUTO_INCREMENT = 1;\nALTER TABLE users AUTO_INCREMENT = 1;\n\n-- Re-enable foreign key checks\nSET FOREIGN_KEY_CHECKS = 1;\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3ghhfwCy5L9HREb.root --database DXWLeDugZrZ9UVbzxvJmL8 --execute \n-- Disable foreign key checks temporarily\nSET FOREIGN_KEY_CHECKS = 0;\n\n-- Delete all data from tables\nDELETE FROM importAlerts;\nDELETE FROM programSchedules;\nDELETE FROM userPermissions;\nDELETE FROM userInvitations;\nDELETE FROM videos;\nDELETE FROM users;\n\n-- Reset auto-increment counters\nALTER TABLE importAlerts AUTO_INCREMENT = 1;\nALTER TABLE programSchedules AUTO_INCREMENT = 1;\nALTER TABLE userPermissions AUTO_INCREMENT = 1;\nALTER TABLE userInvitations AUTO_INCREMENT = 1;\nALTER TABLE videos AUTO_INCREMENT = 1;\nALTER TABLE users AUTO_INCREMENT = 1;\n\n-- Re-enable foreign key checks\nSET FOREIGN_KEY_CHECKS = 1;\n",
+  "rows": [],
+  "messages": [],
+  "stdout": "",
+  "stderr": "",
+  "execution_time_ms": 1495
+}

@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Plus, Download, Settings, LogOut } from "lucide-react";
+import { ThemeToggle } from "@/components/ThemeToggle";
 import { useLocation } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { VideoForm } from "@/components/VideoForm";
@@ -199,7 +200,8 @@ export default function Home() {
             <h1 className="text-3xl font-bold">Acervo TV</h1>
             <p className="text-muted-foreground">Catálogo de Conteúdo Televisivo</p>
           </div>
-          <div className="flex gap-2">
+          <div className="flex gap-2 items-center">
+            <ThemeToggle />
             <Button onClick={handleExportPDF} variant="outline" className="gap-2">
               <Download className="w-4 h-4" />
               Exportar PDF

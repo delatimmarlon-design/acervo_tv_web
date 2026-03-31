@@ -137,3 +137,9 @@
 - [x] Remove "Novo Vídeo" button (import-only mode)
 - [x] Create alerts dashboard
 - [x] Test import workflow end-to-end
+
+
+## Theme & UI Enhancements
+- [x] Implement dark/light theme toggle
+- [x] Add theme persistence to localStorage
+- [x] Create ThemeToggle component in header
