@@ -25,8 +25,9 @@ export default function AdminPanel() {
       refetchInvitations();
       
       // Copy invite link to clipboard
-      if (data.inviteLink) {
-        navigator.clipboard.writeText(data.inviteLink);
+      if (data?.token) {
+        const inviteLink = `${window.location.origin}/invite/${data.token}`;
+        navigator.clipboard.writeText(inviteLink);
         toast.info("Link de convite copiado para a área de transferência");
       }
     },

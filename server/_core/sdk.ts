@@ -297,7 +297,7 @@ class SDKServer {
       lastSignedIn: signedInAt,
     });
 
-    return user;
+    return user as User;
   }
 }
 

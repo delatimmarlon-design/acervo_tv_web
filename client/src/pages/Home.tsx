@@ -115,7 +115,7 @@ export default function Home() {
         format: "a4",
       });
 
-      const tableData = exportData.map((video) => [
+      const tableData = exportData.map((video: typeof exportData[0]) => [
         video.programName,
         video.broadcastDate,
         video.channel,

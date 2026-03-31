@@ -143,6 +143,77 @@ export const appRouter = router({
       .mutation(async ({ ctx, input }) => {
         return await deleteVideo(input.id);
       }),
+    search: protectedProcedure
+      .input(searchVideoSchema)
+      .query(async ({ ctx, input }) => {
+        const db = await getDb();
+        if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+
+        const conditions = [eq(videos.userId, ctx.user.id)];
+        
+        if (input.programName) {
+          conditions.push(like(videos.programName, `%${input.programName}%`));
+        }
+        if (input.channel) {
+          conditions.push(eq(videos.channel, input.channel));
+        }
+        if (input.programType) {
+          conditions.push(eq(videos.programType, input.programType));
+        }
+        if (input.hdNumber) {
+          conditions.push(eq(videos.hdNumber, input.hdNumber));
+        }
+        
+        let query = db.select().from(videos).where(and(...conditions));
+
+        const total = await db.select({ count: videos.id }).from(videos).where(eq(videos.userId, ctx.user.id));
+        const offset = (input.page - 1) * input.limit;
+        
+        const sortColumn = input.sortBy === "programName" ? videos.programName : 
+                          input.sortBy === "broadcastDate" ? videos.broadcastDate :
+                          input.sortBy === "channel" ? videos.channel : videos.createdAt;
+        
+        const sortFn = input.sortOrder === "asc" ? asc : desc;
+        
+        const result = await query.limit(input.limit).offset(offset).orderBy(sortFn(sortColumn));
+
+        return {
+          data: result,
+          total: total.length > 0 ? total[0].count : 0,
+          page: input.page,
+          limit: input.limit,
+          pages: Math.ceil((total.length > 0 ? total[0].count : 0) / input.limit),
+        };
+      }),
+    getAllForExport: protectedProcedure
+      .input(searchVideoSchema.omit({ page: true, limit: true }))
+      .query(async ({ ctx, input }) => {
+        const db = await getDb();
+        if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+
+        const conditions = [eq(videos.userId, ctx.user.id)];
+        
+        if (input.programName) {
+          conditions.push(like(videos.programName, `%${input.programName}%`));
+        }
+        if (input.channel) {
+          conditions.push(eq(videos.channel, input.channel));
+        }
+        if (input.programType) {
+          conditions.push(eq(videos.programType, input.programType));
+        }
+        if (input.hdNumber) {
+          conditions.push(eq(videos.hdNumber, input.hdNumber));
+        }
+        
+        const sortColumn = input.sortBy === "programName" ? videos.programName : 
+                          input.sortBy === "broadcastDate" ? videos.broadcastDate :
+                          input.sortBy === "channel" ? videos.channel : videos.createdAt;
+        
+        const sortFn = input.sortOrder === "asc" ? asc : desc;
+        
+        return await db.select().from(videos).where(and(...conditions)).orderBy(sortFn(sortColumn));
+      }),
   }),
 
   admin: router({

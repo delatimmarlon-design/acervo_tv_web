@@ -40,13 +40,11 @@ export function VideoForm({ open, onOpenChange, video, onSuccess }: VideoFormPro
       if (video?.id) {
         await updateMutation.mutateAsync({
           id: video.id,
-          data: {
-            programName: formData.programName,
-            broadcastDate: formData.broadcastDate,
-            channel: formData.channel,
-            hdNumber: parseInt(formData.hdNumber),
-            programType: formData.programType,
-          },
+          programName: formData.programName,
+          broadcastDate: formData.broadcastDate,
+          channel: formData.channel,
+          hdNumber: parseInt(formData.hdNumber),
+          programType: formData.programType,
         });
         toast.success("Vídeo atualizado com sucesso");
       } else {
