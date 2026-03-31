@@ -13,10 +13,10 @@ export default function AdminPanel() {
   const [invitePermission, setInvitePermission] = useState("viewer");
   const [isOpen, setIsOpen] = useState(false);
 
-  const { data: users, isLoading: usersLoading, refetch: refetchUsers } = trpc.admin.listUsers.useQuery();
-  const { data: invitations, isLoading: invitationsLoading, refetch: refetchInvitations } = trpc.admin.listInvitations.useQuery();
+  const { data: users, isLoading: usersLoading, refetch: refetchUsers } = trpc.admin.users.list.useQuery();
+  const { data: invitations, isLoading: invitationsLoading, refetch: refetchInvitations } = trpc.admin.invitations.list.useQuery();
 
-  const inviteUserMutation = trpc.admin.inviteUser.useMutation({
+  const inviteUserMutation = trpc.admin.users.invite.useMutation({
     onSuccess: (data) => {
       toast.success(`Convite enviado para ${inviteEmail}`);
       setInviteEmail("");
@@ -35,7 +35,7 @@ export default function AdminPanel() {
     },
   });
 
-  const removeUserMutation = trpc.admin.removeUser.useMutation({
+  const removeUserMutation = trpc.admin.users.remove.useMutation({
     onSuccess: () => {
       toast.success("Usuário removido com sucesso");
       refetchUsers();
@@ -45,7 +45,7 @@ export default function AdminPanel() {
     },
   });
 
-  const updatePermissionMutation = trpc.admin.updateUserPermission.useMutation({
+  const updatePermissionMutation = trpc.admin.users.updatePermission.useMutation({
     onSuccess: () => {
       toast.success("Permissão atualizada com sucesso");
       refetchUsers();

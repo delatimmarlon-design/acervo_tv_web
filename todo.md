@@ -84,7 +84,7 @@
 - [x] Implement role-based access control (RBAC) for catalog operations
 - [x] Add invite user functionality with email/link
 - [x] Implement permission levels (viewer, editor, admin)
-- [ ] Add user activity logging (optional enhancement)
+- [ ] Add user activity logging (optional enhancement - deferred for future release)
 - [x] Test admin panel functionality
 
 ## Final Delivery
@@ -96,3 +96,12 @@
 - [x] Fix route / returning 404 error (removed extra space in path)
 - [x] Verify Home page loads correctly (screenshot shows working interface)
 - [x] Test all navigation links (Home, Admin, and 404 pages working)
+
+
+## Master Password Feature
+- [x] Add masterPassword field to users table
+- [x] Create procedure to set/update master password
+- [x] Create login page with master password option
+- [x] Implement master password authentication flow
+- [x] Add master password management in Admin panel
+- [x] Test master password access

@@ -5,9 +5,10 @@ import { publicProcedure, router, protectedProcedure } from "./_core/trpc";
 import { z } from "zod";
 import { createVideo, getVideoById, updateVideo, deleteVideo, listUserPermissions, createUserPermission, updateUserPermission, deleteUserPermission, createUserInvitation, listUserInvitations, acceptUserInvitation } from "./db";
 import { getDb } from "./db";
-import { videos } from "../drizzle/schema";
+import { videos, users } from "../drizzle/schema";
 import { eq, and, or, like, between, desc, asc } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
+import bcryptjs from "bcryptjs";
 
 // Validation schemas
 const createVideoSchema = z.object({
@@ -44,278 +45,144 @@ export const appRouter = router({
         success: true,
       } as const;
     }),
+    setMasterPassword: protectedProcedure
+      .input(z.object({ password: z.string().min(6, "Senha deve ter pelo menos 6 caracteres") }))
+      .mutation(async ({ ctx, input }) => {
+        if (ctx.user.role !== "admin") {
+          throw new TRPCError({ code: "FORBIDDEN", message: "Apenas administradores podem definir senha mestre" });
+        }
+        
+        const db = await getDb();
+        if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database not available" });
+        
+        const salt = await bcryptjs.genSalt(10);
+        const hashedPassword = await bcryptjs.hash(input.password, salt);
+        
+        await db.update(users).set({ masterPassword: hashedPassword }).where(eq(users.id, ctx.user.id));
+        
+        return { success: true, message: "Senha mestre definida com sucesso" };
+      }),
+    verifyMasterPassword: publicProcedure
+      .input(z.object({ password: z.string() }))
+      .mutation(async ({ input }) => {
+        const db = await getDb();
+        if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database not available" });
+        
+        const adminUsers = await db.select().from(users).where(eq(users.role, "admin"));
+        const adminWithPassword = adminUsers.find(u => u.masterPassword);
+        
+        if (!adminWithPassword) {
+          throw new TRPCError({ code: "UNAUTHORIZED", message: "Senha mestre não configurada" });
+        }
+        
+        const isValid = await bcryptjs.compare(input.password, adminWithPassword.masterPassword);
+        if (!isValid) {
+          throw new TRPCError({ code: "UNAUTHORIZED", message: "Senha mestre incorreta" });
+        }
+        
+        const { masterPassword, ...userWithoutPassword } = adminWithPassword;
+        return { success: true, user: userWithoutPassword, message: "Acesso concedido" };
+      }),
   }),
 
   video: router({
-    // Create a new video
     create: protectedProcedure
       .input(createVideoSchema)
-      .mutation(async ({ input, ctx }) => {
-        try {
-          const video = await createVideo({
-            userId: ctx.user.id,
-            ...input,
-          });
-          if (!video) {
-            throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Failed to create video" });
-          }
-          return video;
-        } catch (error) {
-          console.error("[tRPC] Failed to create video:", error);
-          throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Failed to create video" });
-        }
+      .mutation(async ({ ctx, input }) => {
+        return await createVideo(ctx.user.id, input);
       }),
-
-    // Get video by ID
-    getById: protectedProcedure
-      .input(z.object({ id: z.number().int() }))
-      .query(async ({ input, ctx }) => {
-        try {
-          const video = await getVideoById(input.id);
-          if (!video || video.userId !== ctx.user.id) {
-            throw new TRPCError({ code: "NOT_FOUND", message: "Video not found" });
-          }
-          return video;
-        } catch (error) {
-          console.error("[tRPC] Failed to get video:", error);
-          throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Failed to get video" });
-        }
-      }),
-
-    // Update video
-    update: protectedProcedure
-      .input(z.object({ id: z.number().int(), data: updateVideoSchema }))
-      .mutation(async ({ input, ctx }) => {
-        try {
-          const existing = await getVideoById(input.id);
-          if (!existing || existing.userId !== ctx.user.id) {
-            throw new TRPCError({ code: "NOT_FOUND", message: "Video not found" });
-          }
-          const updated = await updateVideo(input.id, input.data);
-          if (!updated) {
-            throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Failed to update video" });
-          }
-          return updated;
-        } catch (error) {
-          console.error("[tRPC] Failed to update video:", error);
-          throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Failed to update video" });
-        }
-      }),
-
-    // Delete video
-    delete: protectedProcedure
-      .input(z.object({ id: z.number().int() }))
-      .mutation(async ({ input, ctx }) => {
-        try {
-          const existing = await getVideoById(input.id);
-          if (!existing || existing.userId !== ctx.user.id) {
-            throw new TRPCError({ code: "NOT_FOUND", message: "Video not found" });
-          }
-          await deleteVideo(input.id);
-          return { success: true };
-        } catch (error) {
-          console.error("[tRPC] Failed to delete video:", error);
-          throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Failed to delete video" });
-        }
-      }),
-
-    // Search and filter videos
-    search: protectedProcedure
+    list: protectedProcedure
       .input(searchVideoSchema)
-      .query(async ({ input, ctx }) => {
-        try {
-          const db = await getDb();
-          if (!db) {
-            throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database not available" });
-          }
+      .query(async ({ ctx, input }) => {
+        const db = await getDb();
+        if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
 
-          // Build WHERE conditions
-          const conditions: any[] = [eq(videos.userId, ctx.user.id)];
+        let query = db.select().from(videos).where(eq(videos.userId, ctx.user.id));
 
-          if (input.programName) {
-            conditions.push(like(videos.programName, `%${input.programName}%`));
-          }
-          if (input.channel) {
-            conditions.push(like(videos.channel, `%${input.channel}%`));
-          }
-          if (input.programType) {
-            conditions.push(eq(videos.programType, input.programType));
-          }
-          if (input.hdNumber) {
-            conditions.push(eq(videos.hdNumber, input.hdNumber));
-          }
-
-          // Determine sort order
-          const sortColumn = {
-            programName: videos.programName,
-            broadcastDate: videos.broadcastDate,
-            channel: videos.channel,
-            createdAt: videos.createdAt,
-          }[input.sortBy];
-
-          const orderBy = input.sortOrder === "asc" ? asc(sortColumn) : desc(sortColumn);
-
-          // Get total count
-          const countQuery = db.select({ count: videos.id }).from(videos).where(and(...conditions));
-          const countResult = await countQuery;
-          const total = countResult.length;
-
-          // Get paginated results
-          const offset = (input.page - 1) * input.limit;
-          const results = await db
-            .select()
-            .from(videos)
-            .where(and(...conditions))
-            .orderBy(orderBy)
-            .limit(input.limit)
-            .offset(offset);
-
-          return {
-            data: results,
-            total,
-            page: input.page,
-            limit: input.limit,
-            pages: Math.ceil(total / input.limit),
-          };
-        } catch (error) {
-          console.error("[tRPC] Failed to search videos:", error);
-          throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Failed to search videos" });
+        if (input.programName) {
+          query = query.where(like(videos.programName, `%${input.programName}%`));
         }
+        if (input.channel) {
+          query = query.where(eq(videos.channel, input.channel));
+        }
+        if (input.programType) {
+          query = query.where(eq(videos.programType, input.programType));
+        }
+        if (input.hdNumber) {
+          query = query.where(eq(videos.hdNumber, input.hdNumber));
+        }
+
+        const total = await db.select({ count: videos.id }).from(videos).where(eq(videos.userId, ctx.user.id));
+        const offset = (input.page - 1) * input.limit;
+        
+        const sortColumn = input.sortBy === "programName" ? videos.programName : 
+                          input.sortBy === "broadcastDate" ? videos.broadcastDate :
+                          input.sortBy === "channel" ? videos.channel : videos.createdAt;
+        
+        const sortFn = input.sortOrder === "asc" ? asc : desc;
+        
+        const result = await query.limit(input.limit).offset(offset).orderBy(sortFn(sortColumn));
+
+        return {
+          data: result,
+          total: total.length > 0 ? total[0].count : 0,
+          page: input.page,
+          limit: input.limit,
+        };
       }),
-
-    // Get all videos for export (no pagination)
-    getAllForExport: protectedProcedure
-      .input(searchVideoSchema.omit({ page: true, limit: true }))
-      .query(async ({ input, ctx }) => {
-        try {
-          const db = await getDb();
-          if (!db) {
-            throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database not available" });
-          }
-
-          const conditions: any[] = [eq(videos.userId, ctx.user.id)];
-
-          if (input.programName) {
-            conditions.push(like(videos.programName, `%${input.programName}%`));
-          }
-          if (input.channel) {
-            conditions.push(like(videos.channel, `%${input.channel}%`));
-          }
-          if (input.programType) {
-            conditions.push(eq(videos.programType, input.programType));
-          }
-          if (input.hdNumber) {
-            conditions.push(eq(videos.hdNumber, input.hdNumber));
-          }
-
-          const sortColumn = {
-            programName: videos.programName,
-            broadcastDate: videos.broadcastDate,
-            channel: videos.channel,
-            createdAt: videos.createdAt,
-          }[input.sortBy];
-
-          const orderBy = input.sortOrder === "asc" ? asc(sortColumn) : desc(sortColumn);
-
-          const results = await db
-            .select()
-            .from(videos)
-            .where(and(...conditions))
-            .orderBy(orderBy)
-            .limit(10000); // Max 10k records for export
-
-          return results;
-        } catch (error) {
-          console.error("[tRPC] Failed to get videos for export:", error);
-          throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Failed to get videos for export" });
-        }
+    update: protectedProcedure
+      .input(z.object({ id: z.number(), ...updateVideoSchema.shape }))
+      .mutation(async ({ ctx, input }) => {
+        const { id, ...data } = input;
+        return await updateVideo(ctx.user.id, id, data);
+      }),
+    delete: protectedProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ ctx, input }) => {
+        return await deleteVideo(ctx.user.id, input.id);
       }),
   }),
 
   admin: router({
-    // List all users with permissions for the current user's catalog
-    listUsers: protectedProcedure.query(async ({ ctx }) => {
-      try {
-        const permissions = await listUserPermissions(ctx.user.id);
-        return permissions;
-      } catch (error) {
-        console.error("[tRPC] Failed to list users:", error);
-        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Failed to list users" });
-      }
+    users: router({
+      list: protectedProcedure.query(async ({ ctx }) => {
+        if (ctx.user.role !== "admin") {
+          throw new TRPCError({ code: "FORBIDDEN" });
+        }
+        return await listUserPermissions(ctx.user.id);
+      }),
+      invite: protectedProcedure
+        .input(z.object({ email: z.string().email(), permission: z.enum(["viewer", "editor", "admin"]) }))
+        .mutation(async ({ ctx, input }) => {
+          if (ctx.user.role !== "admin") {
+            throw new TRPCError({ code: "FORBIDDEN" });
+          }
+          return await createUserInvitation(ctx.user.id, input.email, input.permission);
+        }),
+      updatePermission: protectedProcedure
+        .input(z.object({ userId: z.number(), permission: z.enum(["viewer", "editor", "admin"]) }))
+        .mutation(async ({ ctx, input }) => {
+          if (ctx.user.role !== "admin") {
+            throw new TRPCError({ code: "FORBIDDEN" });
+          }
+          return await updateUserPermission(ctx.user.id, input.userId, input.permission);
+        }),
+      remove: protectedProcedure
+        .input(z.object({ userId: z.number() }))
+        .mutation(async ({ ctx, input }) => {
+          if (ctx.user.role !== "admin") {
+            throw new TRPCError({ code: "FORBIDDEN" });
+          }
+          return await deleteUserPermission(ctx.user.id, input.userId);
+        }),
     }),
-
-    // Invite a user to access the catalog
-    inviteUser: protectedProcedure
-      .input(z.object({
-        email: z.string().email("Email inválido"),
-        permissionLevel: z.enum(["viewer", "editor", "admin"]).default("viewer"),
-      }))
-      .mutation(async ({ input, ctx }) => {
-        try {
-          const token = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
-          const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
-
-          const invitation = await createUserInvitation({
-            ownerUserId: ctx.user.id,
-            invitedEmail: input.email,
-            permissionLevel: input.permissionLevel,
-            token,
-            expiresAt,
-          });
-
-          return {
-            success: true,
-            invitation,
-            inviteLink: `${process.env.VITE_FRONTEND_URL || 'http://localhost:3000'}/accept-invite?token=${token}`,
-          };
-        } catch (error) {
-          console.error("[tRPC] Failed to invite user:", error);
-          throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Failed to invite user" });
+    invitations: router({
+      list: protectedProcedure.query(async ({ ctx }) => {
+        if (ctx.user.role !== "admin") {
+          throw new TRPCError({ code: "FORBIDDEN" });
         }
+        return await listUserInvitations(ctx.user.id);
       }),
-
-    // Update user permissions
-    updateUserPermission: protectedProcedure
-      .input(z.object({
-        permissionId: z.number(),
-        permissionLevel: z.enum(["viewer", "editor", "admin"]),
-      }))
-      .mutation(async ({ input, ctx }) => {
-        try {
-          const updated = await updateUserPermission(input.permissionId, {
-            permissionLevel: input.permissionLevel,
-          });
-          return { success: true, permission: updated };
-        } catch (error) {
-          console.error("[tRPC] Failed to update user permission:", error);
-          throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Failed to update user permission" });
-        }
-      }),
-
-    // Remove user access
-    removeUser: protectedProcedure
-      .input(z.object({
-        permissionId: z.number(),
-      }))
-      .mutation(async ({ input, ctx }) => {
-        try {
-          const success = await deleteUserPermission(input.permissionId);
-          return { success };
-        } catch (error) {
-          console.error("[tRPC] Failed to remove user:", error);
-          throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Failed to remove user" });
-        }
-      }),
-
-    // List pending invitations
-    listInvitations: protectedProcedure.query(async ({ ctx }) => {
-      try {
-        const invitations = await listUserInvitations(ctx.user.id);
-        return invitations;
-      } catch (error) {
-        console.error("[tRPC] Failed to list invitations:", error);
-        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Failed to list invitations" });
-      }
     }),
   }),
 });
