@@ -1,10 +1,39 @@
 import { COOKIE_NAME } from "@shared/const";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
-import { publicProcedure, router } from "./_core/trpc";
+import { publicProcedure, router, protectedProcedure } from "./_core/trpc";
+import { z } from "zod";
+import { createVideo, getVideoById, updateVideo, deleteVideo } from "./db";
+import { getDb } from "./db";
+import { videos } from "../drizzle/schema";
+import { eq, and, or, like, between, desc, asc } from "drizzle-orm";
+import { TRPCError } from "@trpc/server";
+
+// Validation schemas
+const createVideoSchema = z.object({
+  programName: z.string().min(1, "Nome do programa é obrigatório").max(255),
+  broadcastDate: z.string().regex(/^\d{2}\/\d{2}\/\d{4}$/, "Data deve estar no formato dd/mm/aaaa"),
+  channel: z.string().min(1, "Canal é obrigatório").max(100),
+  hdNumber: z.number().int().positive("Número do HD deve ser positivo"),
+  programType: z.enum(["Telejornal", "Novela", "Série", "Variedade"]),
+});
+
+const updateVideoSchema = createVideoSchema.partial();
+
+const searchVideoSchema = z.object({
+  programName: z.string().optional(),
+  channel: z.string().optional(),
+  programType: z.enum(["Telejornal", "Novela", "Série", "Variedade"]).optional(),
+  hdNumber: z.number().int().optional(),
+  dateFrom: z.string().regex(/^\d{2}\/\d{2}\/\d{4}$/).optional(),
+  dateTo: z.string().regex(/^\d{2}\/\d{2}\/\d{4}$/).optional(),
+  page: z.number().int().positive().default(1),
+  limit: z.number().int().positive().default(50),
+  sortBy: z.enum(["programName", "broadcastDate", "channel", "createdAt"]).default("createdAt"),
+  sortOrder: z.enum(["asc", "desc"]).default("desc"),
+});
 
 export const appRouter = router({
-    // if you need to use socket.io, read and register route in server/_core/index.ts, all api should start with '/api/' so that the gateway can route correctly
   system: systemRouter,
   auth: router({
     me: publicProcedure.query(opts => opts.ctx.user),
@@ -17,12 +46,191 @@ export const appRouter = router({
     }),
   }),
 
-  // TODO: add feature routers here, e.g.
-  // todo: router({
-  //   list: protectedProcedure.query(({ ctx }) =>
-  //     db.getUserTodos(ctx.user.id)
-  //   ),
-  // }),
+  video: router({
+    // Create a new video
+    create: protectedProcedure
+      .input(createVideoSchema)
+      .mutation(async ({ input, ctx }) => {
+        try {
+          const video = await createVideo({
+            userId: ctx.user.id,
+            ...input,
+          });
+          if (!video) {
+            throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Failed to create video" });
+          }
+          return video;
+        } catch (error) {
+          console.error("[tRPC] Failed to create video:", error);
+          throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Failed to create video" });
+        }
+      }),
+
+    // Get video by ID
+    getById: protectedProcedure
+      .input(z.object({ id: z.number().int() }))
+      .query(async ({ input, ctx }) => {
+        try {
+          const video = await getVideoById(input.id);
+          if (!video || video.userId !== ctx.user.id) {
+            throw new TRPCError({ code: "NOT_FOUND", message: "Video not found" });
+          }
+          return video;
+        } catch (error) {
+          console.error("[tRPC] Failed to get video:", error);
+          throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Failed to get video" });
+        }
+      }),
+
+    // Update video
+    update: protectedProcedure
+      .input(z.object({ id: z.number().int(), data: updateVideoSchema }))
+      .mutation(async ({ input, ctx }) => {
+        try {
+          const existing = await getVideoById(input.id);
+          if (!existing || existing.userId !== ctx.user.id) {
+            throw new TRPCError({ code: "NOT_FOUND", message: "Video not found" });
+          }
+          const updated = await updateVideo(input.id, input.data);
+          if (!updated) {
+            throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Failed to update video" });
+          }
+          return updated;
+        } catch (error) {
+          console.error("[tRPC] Failed to update video:", error);
+          throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Failed to update video" });
+        }
+      }),
+
+    // Delete video
+    delete: protectedProcedure
+      .input(z.object({ id: z.number().int() }))
+      .mutation(async ({ input, ctx }) => {
+        try {
+          const existing = await getVideoById(input.id);
+          if (!existing || existing.userId !== ctx.user.id) {
+            throw new TRPCError({ code: "NOT_FOUND", message: "Video not found" });
+          }
+          await deleteVideo(input.id);
+          return { success: true };
+        } catch (error) {
+          console.error("[tRPC] Failed to delete video:", error);
+          throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Failed to delete video" });
+        }
+      }),
+
+    // Search and filter videos
+    search: protectedProcedure
+      .input(searchVideoSchema)
+      .query(async ({ input, ctx }) => {
+        try {
+          const db = await getDb();
+          if (!db) {
+            throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database not available" });
+          }
+
+          // Build WHERE conditions
+          const conditions: any[] = [eq(videos.userId, ctx.user.id)];
+
+          if (input.programName) {
+            conditions.push(like(videos.programName, `%${input.programName}%`));
+          }
+          if (input.channel) {
+            conditions.push(like(videos.channel, `%${input.channel}%`));
+          }
+          if (input.programType) {
+            conditions.push(eq(videos.programType, input.programType));
+          }
+          if (input.hdNumber) {
+            conditions.push(eq(videos.hdNumber, input.hdNumber));
+          }
+
+          // Determine sort order
+          const sortColumn = {
+            programName: videos.programName,
+            broadcastDate: videos.broadcastDate,
+            channel: videos.channel,
+            createdAt: videos.createdAt,
+          }[input.sortBy];
+
+          const orderBy = input.sortOrder === "asc" ? asc(sortColumn) : desc(sortColumn);
+
+          // Get total count
+          const countQuery = db.select({ count: videos.id }).from(videos).where(and(...conditions));
+          const countResult = await countQuery;
+          const total = countResult.length;
+
+          // Get paginated results
+          const offset = (input.page - 1) * input.limit;
+          const results = await db
+            .select()
+            .from(videos)
+            .where(and(...conditions))
+            .orderBy(orderBy)
+            .limit(input.limit)
+            .offset(offset);
+
+          return {
+            data: results,
+            total,
+            page: input.page,
+            limit: input.limit,
+            pages: Math.ceil(total / input.limit),
+          };
+        } catch (error) {
+          console.error("[tRPC] Failed to search videos:", error);
+          throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Failed to search videos" });
+        }
+      }),
+
+    // Get all videos for export (no pagination)
+    getAllForExport: protectedProcedure
+      .input(searchVideoSchema.omit({ page: true, limit: true }))
+      .query(async ({ input, ctx }) => {
+        try {
+          const db = await getDb();
+          if (!db) {
+            throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database not available" });
+          }
+
+          const conditions: any[] = [eq(videos.userId, ctx.user.id)];
+
+          if (input.programName) {
+            conditions.push(like(videos.programName, `%${input.programName}%`));
+          }
+          if (input.channel) {
+            conditions.push(like(videos.channel, `%${input.channel}%`));
+          }
+          if (input.programType) {
+            conditions.push(eq(videos.programType, input.programType));
+          }
+          if (input.hdNumber) {
+            conditions.push(eq(videos.hdNumber, input.hdNumber));
+          }
+
+          const sortColumn = {
+            programName: videos.programName,
+            broadcastDate: videos.broadcastDate,
+            channel: videos.channel,
+            createdAt: videos.createdAt,
+          }[input.sortBy];
+
+          const orderBy = input.sortOrder === "asc" ? asc(sortColumn) : desc(sortColumn);
+
+          const results = await db
+            .select()
+            .from(videos)
+            .where(and(...conditions))
+            .orderBy(orderBy)
+            .limit(10000); // Max 10k records for export
+
+          return results;
+        } catch (error) {
+          console.error("[tRPC] Failed to get videos for export:", error);
+          throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Failed to get videos for export" });
+        }
+      }),
+  }),
 });
 
 export type AppRouter = typeof appRouter;

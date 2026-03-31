@@ -1,6 +1,6 @@
 import { eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
-import { InsertUser, users } from "../drizzle/schema";
+import { InsertUser, users, Video, InsertVideo, videos } from "../drizzle/schema";
 import { ENV } from './_core/env';
 
 let _db: ReturnType<typeof drizzle> | null = null;
@@ -87,6 +87,60 @@ export async function getUserByOpenId(openId: string) {
   const result = await db.select().from(users).where(eq(users.openId, openId)).limit(1);
 
   return result.length > 0 ? result[0] : undefined;
+}
+
+// Video queries
+export async function createVideo(video: InsertVideo): Promise<Video | null> {
+  const db = await getDb();
+  if (!db) return null;
+
+  try {
+    const result = await db.insert(videos).values(video);
+    const videoId = (result as any).insertId;
+    return await db.select().from(videos).where(eq(videos.id, videoId)).limit(1).then(r => r[0] || null);
+  } catch (error) {
+    console.error('[Database] Failed to create video:', error);
+    throw error;
+  }
+}
+
+export async function getVideoById(id: number): Promise<Video | null> {
+  const db = await getDb();
+  if (!db) return null;
+
+  try {
+    const result = await db.select().from(videos).where(eq(videos.id, id)).limit(1);
+    return result.length > 0 ? result[0] : null;
+  } catch (error) {
+    console.error('[Database] Failed to get video:', error);
+    throw error;
+  }
+}
+
+export async function updateVideo(id: number, updates: Partial<InsertVideo>): Promise<Video | null> {
+  const db = await getDb();
+  if (!db) return null;
+
+  try {
+    await db.update(videos).set({ ...updates, updatedAt: new Date() }).where(eq(videos.id, id));
+    return await getVideoById(id);
+  } catch (error) {
+    console.error('[Database] Failed to update video:', error);
+    throw error;
+  }
+}
+
+export async function deleteVideo(id: number): Promise<boolean> {
+  const db = await getDb();
+  if (!db) return false;
+
+  try {
+    await db.delete(videos).where(eq(videos.id, id));
+    return true;
+  } catch (error) {
+    console.error('[Database] Failed to delete video:', error);
+    throw error;
+  }
 }
 
 // TODO: add feature queries here as your schema grows.
