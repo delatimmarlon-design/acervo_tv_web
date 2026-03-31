@@ -150,4 +150,4 @@
 
 - [x] Set Century Gothic as default font family (Raleway + Century Gothic fallback)
 
-- [x] Fix: Botão "Importar Vídeos" não está funcionando (adicionado alerta visual para campos obrigatorios)
+- [x] Fix: Botão "Importar Vídeos" - Refatorar fluxo com diálogos sequenciais (HD, Canal, Tipo)
