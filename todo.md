@@ -151,3 +151,5 @@
 - [x] Set Century Gothic as default font family (Raleway + Century Gothic fallback)
 
 - [x] Fix: Botão "Importar Vídeos" - Refatorar fluxo com diálogos sequenciais (HD, Canal, Tipo)
+
+- [x] Fix: Botão "Sair" - Adicionado redirecionamento para página de login após logout

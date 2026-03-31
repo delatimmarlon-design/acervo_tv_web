@@ -218,7 +218,11 @@ export default function Home() {
               <span>{user?.name}</span>
             </div>
             <Button onClick={() => {
-              logoutMutation.mutate();
+              logoutMutation.mutate(undefined, {
+                onSuccess: () => {
+                  window.location.href = '/';
+                },
+              });
             }} variant="ghost" className="gap-2 text-red-600 hover:text-red-700">
               <LogOut className="w-4 h-4" />
               Sair
