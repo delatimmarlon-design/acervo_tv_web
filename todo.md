@@ -105,3 +105,18 @@
 - [x] Implement master password authentication flow
 - [x] Add master password management in Admin panel
 - [x] Test master password access
+
+
+## UI/UX Improvements
+- [x] Add logout button to header/navigation (Botão "Sair" adicionado ao header)
+- [x] Create login page as initial entry point (Página de login já existe)
+- [x] Implement automatic logout after 3 minutes of inactivity (useEffect com inactivity timer)
+- [x] Add user profile menu with logout option (Nome do usuário exibido no header)
+
+
+## Pending Fixes & Improvements
+- [ ] Wire '/' to dedicated Login page as initial entry point
+- [ ] Refactor inactivity logout with robust error handling
+- [ ] Implement user profile dropdown menu
+- [ ] Resolve TypeScript errors in server/routers.ts
+- [ ] Add tests for auth UX flows

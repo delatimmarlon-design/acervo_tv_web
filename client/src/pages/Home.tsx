@@ -1,7 +1,7 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { Button } from "@/components/ui/button";
-import { Plus, Download, Settings } from "lucide-react";
+import { Plus, Download, Settings, LogOut } from "lucide-react";
 import { useLocation } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { VideoForm } from "@/components/VideoForm";
@@ -24,6 +24,7 @@ export default function Home() {
   const [formOpen, setFormOpen] = useState(false);
   const [editingVideo, setEditingVideo] = useState<Video | undefined>();
   const [currentPage, setCurrentPage] = useState(1);
+  const logoutMutation = trpc.auth.logout.useMutation();
 
   // Filter states
   const [filters, setFilters] = useState({
@@ -149,6 +150,33 @@ export default function Home() {
     }
   };
 
+  // Auto-logout after 3 minutes of inactivity
+  useEffect(() => {
+    let inactivityTimer: NodeJS.Timeout;
+    
+    const resetTimer = () => {
+      clearTimeout(inactivityTimer);
+      inactivityTimer = setTimeout(() => {
+        logoutMutation.mutate();
+        window.location.href = '/';
+      }, 3 * 60 * 1000); // 3 minutes
+    };
+    
+    // Set up event listeners for user activity
+    window.addEventListener('mousedown', resetTimer);
+    window.addEventListener('keydown', resetTimer);
+    window.addEventListener('scroll', resetTimer);
+    
+    resetTimer();
+    
+    return () => {
+      clearTimeout(inactivityTimer);
+      window.removeEventListener('mousedown', resetTimer);
+      window.removeEventListener('keydown', resetTimer);
+      window.removeEventListener('scroll', resetTimer);
+    };
+  }, [logoutMutation]);
+
   if (!isAuthenticated) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100">
@@ -182,6 +210,15 @@ export default function Home() {
             <Button onClick={() => setFormOpen(true)} className="gap-2">
               <Plus className="w-4 h-4" />
               Novo Vídeo
+            </Button>
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <span>{user?.name}</span>
+            </div>
+            <Button onClick={() => {
+              logoutMutation.mutate();
+            }} variant="ghost" className="gap-2 text-red-600 hover:text-red-700">
+              <LogOut className="w-4 h-4" />
+              Sair
             </Button>
           </div>
         </div>
