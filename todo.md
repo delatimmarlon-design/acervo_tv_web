@@ -149,3 +149,5 @@
 - [x] Fix FORBIDDEN error when user tries to access admin panel (user promoted to admin role)
 
 - [x] Set Century Gothic as default font family (Raleway + Century Gothic fallback)
+
+- [x] Fix: Botão "Importar Vídeos" não está funcionando (adicionado alerta visual para campos obrigatorios)

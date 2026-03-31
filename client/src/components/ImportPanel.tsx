@@ -265,6 +265,20 @@ export default function ImportPanel({ onImportComplete }: ImportPanelProps) {
           </div>
         )}
 
+        {/* Missing Fields Alert */}
+        {parsedFiles.length > 0 && (!hdNumber || !channel) && (
+          <div className="flex items-start gap-2 text-sm text-amber-700 bg-amber-50 border border-amber-200 p-3 rounded-lg">
+            <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+            <div>
+              <p className="font-medium">Campos obrigatorios faltando:</p>
+              <ul className="text-xs mt-1 space-y-1">
+                {!hdNumber && <li>• Numero do HD</li>}
+                {!channel && <li>• Canal</li>}
+              </ul>
+            </div>
+          </div>
+        )}
+
         {/* Import Button */}
         <Button
           onClick={handleImport}
