@@ -3,7 +3,7 @@ import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, router, protectedProcedure } from "./_core/trpc";
 import { z } from "zod";
-import { createVideo, getVideoById, updateVideo, deleteVideo } from "./db";
+import { createVideo, getVideoById, updateVideo, deleteVideo, listUserPermissions, createUserPermission, updateUserPermission, deleteUserPermission, createUserInvitation, listUserInvitations, acceptUserInvitation } from "./db";
 import { getDb } from "./db";
 import { videos } from "../drizzle/schema";
 import { eq, and, or, like, between, desc, asc } from "drizzle-orm";
@@ -230,6 +230,93 @@ export const appRouter = router({
           throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Failed to get videos for export" });
         }
       }),
+  }),
+
+  admin: router({
+    // List all users with permissions for the current user's catalog
+    listUsers: protectedProcedure.query(async ({ ctx }) => {
+      try {
+        const permissions = await listUserPermissions(ctx.user.id);
+        return permissions;
+      } catch (error) {
+        console.error("[tRPC] Failed to list users:", error);
+        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Failed to list users" });
+      }
+    }),
+
+    // Invite a user to access the catalog
+    inviteUser: protectedProcedure
+      .input(z.object({
+        email: z.string().email("Email inválido"),
+        permissionLevel: z.enum(["viewer", "editor", "admin"]).default("viewer"),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        try {
+          const token = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+          const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
+
+          const invitation = await createUserInvitation({
+            ownerUserId: ctx.user.id,
+            invitedEmail: input.email,
+            permissionLevel: input.permissionLevel,
+            token,
+            expiresAt,
+          });
+
+          return {
+            success: true,
+            invitation,
+            inviteLink: `${process.env.VITE_FRONTEND_URL || 'http://localhost:3000'}/accept-invite?token=${token}`,
+          };
+        } catch (error) {
+          console.error("[tRPC] Failed to invite user:", error);
+          throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Failed to invite user" });
+        }
+      }),
+
+    // Update user permissions
+    updateUserPermission: protectedProcedure
+      .input(z.object({
+        permissionId: z.number(),
+        permissionLevel: z.enum(["viewer", "editor", "admin"]),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        try {
+          const updated = await updateUserPermission(input.permissionId, {
+            permissionLevel: input.permissionLevel,
+          });
+          return { success: true, permission: updated };
+        } catch (error) {
+          console.error("[tRPC] Failed to update user permission:", error);
+          throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Failed to update user permission" });
+        }
+      }),
+
+    // Remove user access
+    removeUser: protectedProcedure
+      .input(z.object({
+        permissionId: z.number(),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        try {
+          const success = await deleteUserPermission(input.permissionId);
+          return { success };
+        } catch (error) {
+          console.error("[tRPC] Failed to remove user:", error);
+          throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Failed to remove user" });
+        }
+      }),
+
+    // List pending invitations
+    listInvitations: protectedProcedure.query(async ({ ctx }) => {
+      try {
+        const invitations = await listUserInvitations(ctx.user.id);
+        return invitations;
+      } catch (error) {
+        console.error("[tRPC] Failed to list invitations:", error);
+        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Failed to list invitations" });
+      }
+    }),
   }),
 });
 

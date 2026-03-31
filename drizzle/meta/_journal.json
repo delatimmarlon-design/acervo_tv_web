@@ -15,6 +15,13 @@
       "when": 1774922095144,
       "tag": "0001_public_blade",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "5",
+      "when": 1774922785148,
+      "tag": "0002_nebulous_ulik",
+      "breakpoints": true
     }
   ]
 }

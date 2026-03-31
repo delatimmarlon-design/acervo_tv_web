@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { Button } from "@/components/ui/button";
-import { Plus, Download } from "lucide-react";
+import { Plus, Download, Settings } from "lucide-react";
+import { useLocation } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { VideoForm } from "@/components/VideoForm";
 import { VideoTable } from "@/components/VideoTable";
@@ -19,6 +20,7 @@ declare global {
 
 export default function Home() {
   const { user, isAuthenticated } = useAuth();
+  const [, setLocation] = useLocation();
   const [formOpen, setFormOpen] = useState(false);
   const [editingVideo, setEditingVideo] = useState<Video | undefined>();
   const [currentPage, setCurrentPage] = useState(1);
@@ -172,6 +174,10 @@ export default function Home() {
             <Button onClick={handleExportPDF} variant="outline" className="gap-2">
               <Download className="w-4 h-4" />
               Exportar PDF
+            </Button>
+            <Button onClick={() => setLocation("/admin")} variant="outline" className="gap-2">
+              <Settings className="w-4 h-4" />
+              Admin
             </Button>
             <Button onClick={() => setFormOpen(true)} className="gap-2">
               <Plus className="w-4 h-4" />

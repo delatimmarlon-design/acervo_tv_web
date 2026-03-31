@@ -1,6 +1,6 @@
-import { eq } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
-import { InsertUser, users, Video, InsertVideo, videos } from "../drizzle/schema";
+import { InsertUser, users, Video, InsertVideo, videos, UserPermission, InsertUserPermission, userPermissions, UserInvitation, InsertUserInvitation, userInvitations } from "../drizzle/schema";
 import { ENV } from './_core/env';
 
 let _db: ReturnType<typeof drizzle> | null = null;
@@ -139,6 +139,125 @@ export async function deleteVideo(id: number): Promise<boolean> {
     return true;
   } catch (error) {
     console.error('[Database] Failed to delete video:', error);
+    throw error;
+  }
+}
+
+// User permissions queries
+export async function getUserPermissions(userId: number, ownerUserId: number): Promise<UserPermission | null> {
+  const db = await getDb();
+  if (!db) return null;
+
+  try {
+    const result = await db.select().from(userPermissions).where(and(eq(userPermissions.userId, userId), eq(userPermissions.ownerUserId, ownerUserId))).limit(1);
+    return result.length > 0 ? result[0] : null;
+  } catch (error) {
+    console.error('[Database] Failed to get user permissions:', error);
+    throw error;
+  }
+}
+
+export async function listUserPermissions(ownerUserId: number): Promise<UserPermission[]> {
+  const db = await getDb();
+  if (!db) return [];
+
+  try {
+    return await db.select().from(userPermissions).where(eq(userPermissions.ownerUserId, ownerUserId));
+  } catch (error) {
+    console.error('[Database] Failed to list user permissions:', error);
+    throw error;
+  }
+}
+
+export async function createUserPermission(permission: InsertUserPermission): Promise<UserPermission | null> {
+  const db = await getDb();
+  if (!db) return null;
+
+  try {
+    const result = await db.insert(userPermissions).values(permission);
+    const permissionId = (result as any).insertId;
+    return await db.select().from(userPermissions).where(eq(userPermissions.id, permissionId)).limit(1).then(r => r[0] || null);
+  } catch (error) {
+    console.error('[Database] Failed to create user permission:', error);
+    throw error;
+  }
+}
+
+export async function updateUserPermission(id: number, updates: Partial<InsertUserPermission>): Promise<UserPermission | null> {
+  const db = await getDb();
+  if (!db) return null;
+
+  try {
+    await db.update(userPermissions).set({ ...updates, updatedAt: new Date() }).where(eq(userPermissions.id, id));
+    return await db.select().from(userPermissions).where(eq(userPermissions.id, id)).limit(1).then(r => r[0] || null);
+  } catch (error) {
+    console.error('[Database] Failed to update user permission:', error);
+    throw error;
+  }
+}
+
+export async function deleteUserPermission(id: number): Promise<boolean> {
+  const db = await getDb();
+  if (!db) return false;
+
+  try {
+    await db.delete(userPermissions).where(eq(userPermissions.id, id));
+    return true;
+  } catch (error) {
+    console.error('[Database] Failed to delete user permission:', error);
+    throw error;
+  }
+}
+
+// User invitations queries
+export async function createUserInvitation(invitation: InsertUserInvitation): Promise<UserInvitation | null> {
+  const db = await getDb();
+  if (!db) return null;
+
+  try {
+    const result = await db.insert(userInvitations).values(invitation);
+    const invitationId = (result as any).insertId;
+    return await db.select().from(userInvitations).where(eq(userInvitations.id, invitationId)).limit(1).then(r => r[0] || null);
+  } catch (error) {
+    console.error('[Database] Failed to create user invitation:', error);
+    throw error;
+  }
+}
+
+export async function getUserInvitationByToken(token: string): Promise<UserInvitation | null> {
+  const db = await getDb();
+  if (!db) return null;
+
+  try {
+    const result = await db.select().from(userInvitations).where(eq(userInvitations.token, token)).limit(1);
+    return result.length > 0 ? result[0] : null;
+  } catch (error) {
+    console.error('[Database] Failed to get user invitation:', error);
+    throw error;
+  }
+}
+
+export async function listUserInvitations(ownerUserId: number): Promise<UserInvitation[]> {
+  const db = await getDb();
+  if (!db) return [];
+
+  try {
+    return await db.select().from(userInvitations).where(eq(userInvitations.ownerUserId, ownerUserId));
+  } catch (error) {
+    console.error('[Database] Failed to list user invitations:', error);
+    throw error;
+  }
+}
+
+export async function acceptUserInvitation(id: number): Promise<UserInvitation | null> {
+  const db = await getDb();
+  if (!db) return null;
+
+  try {
+    await db.update(userInvitations).set({ acceptedAt: new Date() }).where(eq(userInvitations.id, id));
+    return await db.select().from(userInvitations).where(eq(userInvitations.id, id)).limit(1).then(r => r[0] || null);
+  } catch (error) {
+    console.error('[Database] Failed to accept user invitation:', error);
     throw error;
   }
 }

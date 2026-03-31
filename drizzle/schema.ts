@@ -54,3 +54,51 @@ export const videos = mysqlTable(
 
 export type Video = typeof videos.$inferSelect;
 export type InsertVideo = typeof videos.$inferInsert;
+
+/**
+ * User permissions table for managing access control
+ * Links users to projects/workspaces with specific permission levels
+ */
+export const userPermissions = mysqlTable(
+  "userPermissions",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    userId: int("userId").notNull(), // User being granted permission
+    ownerUserId: int("ownerUserId").notNull(), // Owner of the catalog
+    permissionLevel: mysqlEnum("permissionLevel", ["viewer", "editor", "admin"]).default("viewer").notNull(),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  (table) => ({
+    userIdIdx: index("userPermissionUserIdIdx").on(table.userId),
+    ownerUserIdIdx: index("userPermissionOwnerUserIdIdx").on(table.ownerUserId),
+  })
+);
+
+export type UserPermission = typeof userPermissions.$inferSelect;
+export type InsertUserPermission = typeof userPermissions.$inferInsert;
+
+/**
+ * User invitations table for managing access invites
+ * Stores pending invitations for users to join a catalog
+ */
+export const userInvitations = mysqlTable(
+  "userInvitations",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    ownerUserId: int("ownerUserId").notNull(), // Owner sending the invitation
+    invitedEmail: varchar("invitedEmail", { length: 320 }).notNull(), // Email of invited user
+    permissionLevel: mysqlEnum("permissionLevel", ["viewer", "editor", "admin"]).default("viewer").notNull(),
+    token: varchar("token", { length: 255 }).notNull().unique(), // Unique token for invitation link
+    expiresAt: timestamp("expiresAt").notNull(), // Invitation expiration time
+    acceptedAt: timestamp("acceptedAt"), // When the invitation was accepted
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+  },
+  (table) => ({
+    ownerUserIdIdx: index("invitationOwnerUserIdIdx").on(table.ownerUserId),
+    tokenIdx: index("invitationTokenIdx").on(table.token),
+  })
+);
+
+export type UserInvitation = typeof userInvitations.$inferSelect;
+export type InsertUserInvitation = typeof userInvitations.$inferInsert;

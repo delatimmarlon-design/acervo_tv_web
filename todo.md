@@ -75,3 +75,18 @@
 - [x] Test live deployment
 - [x] Provide user with access link
 - [x] Document usage instructions if needed
+
+
+## Admin Panel - User Management
+- [x] Update database schema to add user permissions and roles
+- [x] Create tRPC procedures for user management (list, invite, update permissions, remove)
+- [x] Create Admin Dashboard page with user list
+- [x] Implement role-based access control (RBAC) for catalog operations
+- [x] Add invite user functionality with email/link
+- [x] Implement permission levels (viewer, editor, admin)
+- [ ] Add user activity logging (optional enhancement)
+- [x] Test admin panel functionality
+
+## Final Delivery
+- [ ] Create final checkpoint with admin panel
+- [ ] Deliver complete system to user
