@@ -115,25 +115,25 @@
 
 
 ## Pending Fixes & Improvements
-- [ ] Wire '/' to dedicated Login page as initial entry point
-- [ ] Refactor inactivity logout with robust error handling
-- [ ] Implement user profile dropdown menu
-- [ ] Resolve TypeScript errors in server/routers.ts
-- [ ] Add tests for auth UX flows
+- [x] Wire '/' to dedicated Login page as initial entry point
+- [x] Refactor inactivity logout with robust error handling
+- [x] Implement user profile dropdown menu
+- [x] Resolve TypeScript errors in server/routers.ts
+- [x] Add tests for auth UX flows
 
 
 ## Advanced Import System
-- [ ] Add programSchedule table to schema (days of week for each program)
-- [ ] Add importAlerts table for inconsistencies and missing episodes
-- [ ] Create procedures for file parsing and validation
-- [ ] Implement day-of-week validation logic
-- [ ] Implement gap detection algorithm
-- [ ] Create ImportPanel component with drag & drop
-- [ ] Implement file name parser (PROGRAMA DD-MM-AAAA.mp4)
-- [ ] Create day-of-week selection dialog
-- [ ] Implement inconsistency detection and alerts
-- [ ] Implement gap detection and alerts
-- [ ] Add disk space monitoring (alert when <500GB)
-- [ ] Remove "Novo Vídeo" button (import-only mode)
-- [ ] Create alerts dashboard
-- [ ] Test import workflow end-to-end
+- [x] Add programSchedule table to schema (days of week for each program)
+- [x] Add importAlerts table for inconsistencies and missing episodes
+- [x] Create procedures for file parsing and validation
+- [x] Implement day-of-week validation logic
+- [x] Implement gap detection algorithm
+- [x] Create ImportPanel component with drag & drop
+- [x] Implement file name parser (PROGRAMA DD-MM-YYYY.mp4)
+- [x] Create day-of-week selection dialog
+- [x] Implement inconsistency detection and alerts
+- [x] Implement gap detection and alerts
+- [x] Add disk space monitoring (alert when <500GB)
+- [x] Remove "Novo Vídeo" button (import-only mode)
+- [x] Create alerts dashboard
+- [x] Test import workflow end-to-end

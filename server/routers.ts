@@ -195,6 +195,52 @@ export const appRouter = router({
       }),
     }),
   }),
+
+  import: router({
+    validateFilename: publicProcedure
+      .input(z.object({ filename: z.string() }))
+      .query(({ input }) => {
+        // Pattern: "PROGRAM_NAME DD-MM-YYYY.mp4"
+        const pattern = /^(.+?)\s+(\d{2})-(\d{2})-(\d{4})\.mp4$/i;
+        const match = input.filename.match(pattern);
+
+        if (!match) {
+          return {
+            valid: false,
+            error: "Formato inválido. Use: PROGRAMA DD-MM-YYYY.mp4",
+          };
+        }
+
+        const [, programName, day, month, year] = match;
+        const broadcastDate = `${day}/${month}/${year}`;
+
+        // Validate date
+        const dayNum = parseInt(day);
+        const monthNum = parseInt(month);
+        const yearNum = parseInt(year);
+
+        if (monthNum < 1 || monthNum > 12) {
+          return {
+            valid: false,
+            error: `Mês inválido: ${month}. Use 01-12.`,
+          };
+        }
+
+        if (dayNum < 1 || dayNum > 31) {
+          return {
+            valid: false,
+            error: `Dia inválido: ${day}. Use 01-31.`,
+          };
+        }
+
+        return {
+          valid: true,
+          programName: programName.trim(),
+          broadcastDate,
+          filename: input.filename,
+        };
+      }),
+  }),
 });
 
 export type AppRouter = typeof appRouter;
