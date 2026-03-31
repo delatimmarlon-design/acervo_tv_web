@@ -103,3 +103,52 @@ export const userInvitations = mysqlTable(
 
 export type UserInvitation = typeof userInvitations.$inferSelect;
 export type InsertUserInvitation = typeof userInvitations.$inferInsert;
+
+/**
+ * Program schedule table for storing broadcast days of each program
+ * Tracks which days of the week a program is normally broadcast
+ */
+export const programSchedules = mysqlTable(
+  "programSchedules",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    userId: int("userId").notNull(),
+    programName: varchar("programName", { length: 255 }).notNull(),
+    daysOfWeek: text("daysOfWeek").notNull(), // JSON array: [0-6]
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  (table) => ({
+    userIdIdx: index("scheduleUserIdIdx").on(table.userId),
+    programNameIdx: index("scheduleProgramNameIdx").on(table.programName),
+  })
+);
+
+export type ProgramSchedule = typeof programSchedules.$inferSelect;
+export type InsertProgramSchedule = typeof programSchedules.$inferInsert;
+
+/**
+ * Import alerts table for tracking inconsistencies and missing episodes
+ */
+export const importAlerts = mysqlTable(
+  "importAlerts",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    userId: int("userId").notNull(),
+    programName: varchar("programName", { length: 255 }).notNull(),
+    alertType: mysqlEnum("alertType", ["unusual_date", "missing_episode", "disk_space"]).notNull(),
+    alertMessage: text("alertMessage").notNull(),
+    broadcastDate: varchar("broadcastDate", { length: 10 }),
+    status: mysqlEnum("status", ["pending", "acknowledged", "resolved"]).default("pending").notNull(),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  (table) => ({
+    userIdIdx: index("alertUserIdIdx").on(table.userId),
+    programNameIdx: index("alertProgramNameIdx").on(table.programName),
+    statusIdx: index("alertStatusIdx").on(table.status),
+  })
+);
+
+export type ImportAlert = typeof importAlerts.$inferSelect;
+export type InsertImportAlert = typeof importAlerts.$inferInsert;

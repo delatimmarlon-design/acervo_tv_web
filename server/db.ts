@@ -1,6 +1,6 @@
 import { eq, and } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
-import { InsertUser, users, Video, InsertVideo, videos, UserPermission, InsertUserPermission, userPermissions, UserInvitation, InsertUserInvitation, userInvitations } from "../drizzle/schema";
+import { InsertUser, users, Video, InsertVideo, videos, UserPermission, InsertUserPermission, userPermissions, UserInvitation, InsertUserInvitation, userInvitations, ProgramSchedule, InsertProgramSchedule, programSchedules, ImportAlert, InsertImportAlert, importAlerts } from "../drizzle/schema";
 import { ENV } from './_core/env';
 
 let _db: ReturnType<typeof drizzle> | null = null;
@@ -30,54 +30,33 @@ export async function upsertUser(user: InsertUser): Promise<void> {
   }
 
   try {
-    const values: InsertUser = {
-      openId: user.openId,
-    };
-    const updateSet: Record<string, unknown> = {};
-
-    const textFields = ["name", "email", "loginMethod"] as const;
-    type TextField = (typeof textFields)[number];
-
-    const assignNullable = (field: TextField) => {
-      const value = user[field];
-      if (value === undefined) return;
-      const normalized = value ?? null;
-      values[field] = normalized;
-      updateSet[field] = normalized;
-    };
-
-    textFields.forEach(assignNullable);
-
-    if (user.lastSignedIn !== undefined) {
-      values.lastSignedIn = user.lastSignedIn;
-      updateSet.lastSignedIn = user.lastSignedIn;
+    // Check if user exists
+    const existing = await db.select().from(users).where(eq(users.openId, user.openId)).limit(1);
+    
+    if (existing.length > 0) {
+      // Update existing user
+      const updateData: Record<string, any> = { updatedAt: new Date(), lastSignedIn: new Date() };
+      if (user.name) updateData.name = user.name;
+      if (user.email) updateData.email = user.email;
+      if (user.loginMethod) updateData.loginMethod = user.loginMethod;
+      
+      await db.update(users).set(updateData).where(eq(users.openId, user.openId));
+    } else {
+      // Insert new user
+      await db.insert(users).values({
+        openId: user.openId,
+        name: user.name || null,
+        email: user.email || null,
+        loginMethod: user.loginMethod || null,
+      });
     }
-    if (user.role !== undefined) {
-      values.role = user.role;
-      updateSet.role = user.role;
-    } else if (user.openId === ENV.ownerOpenId) {
-      values.role = 'admin';
-      updateSet.role = 'admin';
-    }
-
-    if (!values.lastSignedIn) {
-      values.lastSignedIn = new Date();
-    }
-
-    if (Object.keys(updateSet).length === 0) {
-      updateSet.lastSignedIn = new Date();
-    }
-
-    await db.insert(users).values(values).onDuplicateKeyUpdate({
-      set: updateSet,
-    });
   } catch (error) {
-    console.error("[Database] Failed to upsert user:", error);
+    console.error('[Database] Failed to upsert user:', error);
     throw error;
   }
 }
 
-export async function getUserByOpenId(openId: string) {
+export async function getUserByOpenId(openId: string): Promise<InsertUser | undefined> {
   const db = await getDb();
   if (!db) {
     console.warn("[Database] Cannot get user: database not available");
@@ -183,25 +162,29 @@ export async function createUserPermission(permission: InsertUserPermission): Pr
   }
 }
 
-export async function updateUserPermission(id: number, updates: Partial<InsertUserPermission>): Promise<UserPermission | null> {
+export async function updateUserPermission(ownerUserId: number, userId: number, permissionLevel: string): Promise<UserPermission | null> {
   const db = await getDb();
   if (!db) return null;
 
   try {
-    await db.update(userPermissions).set({ ...updates, updatedAt: new Date() }).where(eq(userPermissions.id, id));
-    return await db.select().from(userPermissions).where(eq(userPermissions.id, id)).limit(1).then(r => r[0] || null);
+    const result = await db.select().from(userPermissions).where(and(eq(userPermissions.userId, userId), eq(userPermissions.ownerUserId, ownerUserId))).limit(1);
+    if (result.length === 0) return null;
+    
+    const permId = result[0].id;
+    await db.update(userPermissions).set({ permissionLevel: permissionLevel as any, updatedAt: new Date() }).where(eq(userPermissions.id, permId));
+    return await db.select().from(userPermissions).where(eq(userPermissions.id, permId)).limit(1).then(r => r[0] || null);
   } catch (error) {
     console.error('[Database] Failed to update user permission:', error);
     throw error;
   }
 }
 
-export async function deleteUserPermission(id: number): Promise<boolean> {
+export async function deleteUserPermission(ownerUserId: number, userId: number): Promise<boolean> {
   const db = await getDb();
   if (!db) return false;
 
   try {
-    await db.delete(userPermissions).where(eq(userPermissions.id, id));
+    await db.delete(userPermissions).where(and(eq(userPermissions.userId, userId), eq(userPermissions.ownerUserId, ownerUserId)));
     return true;
   } catch (error) {
     console.error('[Database] Failed to delete user permission:', error);
@@ -210,11 +193,22 @@ export async function deleteUserPermission(id: number): Promise<boolean> {
 }
 
 // User invitations queries
-export async function createUserInvitation(invitation: InsertUserInvitation): Promise<UserInvitation | null> {
+export async function createUserInvitation(ownerUserId: number, email: string, permissionLevel: string): Promise<UserInvitation | null> {
   const db = await getDb();
   if (!db) return null;
 
   try {
+    const token = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
+    
+    const invitation: InsertUserInvitation = {
+      ownerUserId,
+      invitedEmail: email,
+      permissionLevel: permissionLevel as any,
+      token,
+      expiresAt,
+    };
+    
     const result = await db.insert(userInvitations).values(invitation);
     const invitationId = (result as any).insertId;
     return await db.select().from(userInvitations).where(eq(userInvitations.id, invitationId)).limit(1).then(r => r[0] || null);
@@ -258,6 +252,64 @@ export async function acceptUserInvitation(id: number): Promise<UserInvitation |
     return await db.select().from(userInvitations).where(eq(userInvitations.id, id)).limit(1).then(r => r[0] || null);
   } catch (error) {
     console.error('[Database] Failed to accept user invitation:', error);
+    throw error;
+  }
+}
+
+// Program schedule queries
+export async function createProgramSchedule(schedule: InsertProgramSchedule): Promise<ProgramSchedule | null> {
+  const db = await getDb();
+  if (!db) return null;
+
+  try {
+    const result = await db.insert(programSchedules).values(schedule);
+    const scheduleId = (result as any).insertId;
+    return await db.select().from(programSchedules).where(eq(programSchedules.id, scheduleId)).limit(1).then(r => r[0] || null);
+  } catch (error) {
+    console.error('[Database] Failed to create program schedule:', error);
+    throw error;
+  }
+}
+
+export async function getProgramSchedule(userId: number, programName: string): Promise<ProgramSchedule | null> {
+  const db = await getDb();
+  if (!db) return null;
+
+  try {
+    const result = await db.select().from(programSchedules).where(and(eq(programSchedules.userId, userId), eq(programSchedules.programName, programName))).limit(1);
+    return result.length > 0 ? result[0] : null;
+  } catch (error) {
+    console.error('[Database] Failed to get program schedule:', error);
+    throw error;
+  }
+}
+
+// Import alerts queries
+export async function createImportAlert(alert: InsertImportAlert): Promise<ImportAlert | null> {
+  const db = await getDb();
+  if (!db) return null;
+
+  try {
+    const result = await db.insert(importAlerts).values(alert);
+    const alertId = (result as any).insertId;
+    return await db.select().from(importAlerts).where(eq(importAlerts.id, alertId)).limit(1).then(r => r[0] || null);
+  } catch (error) {
+    console.error('[Database] Failed to create import alert:', error);
+    throw error;
+  }
+}
+
+export async function listImportAlerts(userId: number, status?: string): Promise<ImportAlert[]> {
+  const db = await getDb();
+  if (!db) return [];
+
+  try {
+    if (status) {
+      return await db.select().from(importAlerts).where(and(eq(importAlerts.userId, userId), eq(importAlerts.status, status as any)));
+    }
+    return await db.select().from(importAlerts).where(eq(importAlerts.userId, userId));
+  } catch (error) {
+    console.error('[Database] Failed to list import alerts:', error);
     throw error;
   }
 }

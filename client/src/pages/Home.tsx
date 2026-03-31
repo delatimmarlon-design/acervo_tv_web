@@ -7,6 +7,7 @@ import { trpc } from "@/lib/trpc";
 import { VideoForm } from "@/components/VideoForm";
 import { VideoTable } from "@/components/VideoTable";
 import { FilterPanel } from "@/components/FilterPanel";
+import ImportPanel from "@/components/ImportPanel";
 import { toast } from "sonner";
 import type { Video } from "../../../drizzle/schema";
 import { jsPDF } from "jspdf";
@@ -222,6 +223,9 @@ export default function Home() {
             </Button>
           </div>
         </div>
+
+        {/* Import Panel */}
+        <ImportPanel onImportComplete={handleSearch} />
 
         {/* Filter Panel */}
         <FilterPanel

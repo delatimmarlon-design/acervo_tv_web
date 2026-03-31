@@ -5,7 +5,7 @@ import { publicProcedure, router, protectedProcedure } from "./_core/trpc";
 import { z } from "zod";
 import { createVideo, getVideoById, updateVideo, deleteVideo, listUserPermissions, createUserPermission, updateUserPermission, deleteUserPermission, createUserInvitation, listUserInvitations, acceptUserInvitation } from "./db";
 import { getDb } from "./db";
-import { videos, users } from "../drizzle/schema";
+import { videos, users, userPermissions } from "../drizzle/schema";
 import { eq, and, or, like, between, desc, asc } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 import bcryptjs from "bcryptjs";
@@ -75,7 +75,7 @@ export const appRouter = router({
           throw new TRPCError({ code: "UNAUTHORIZED", message: "Senha mestre não configurada" });
         }
         
-        const isValid = await bcryptjs.compare(input.password, adminWithPassword.masterPassword);
+        const isValid = await bcryptjs.compare(input.password, adminWithPassword.masterPassword || "");
         if (!isValid) {
           throw new TRPCError({ code: "UNAUTHORIZED", message: "Senha mestre incorreta" });
         }
@@ -89,7 +89,7 @@ export const appRouter = router({
     create: protectedProcedure
       .input(createVideoSchema)
       .mutation(async ({ ctx, input }) => {
-        return await createVideo(ctx.user.id, input);
+        return await createVideo({ ...input, userId: ctx.user.id });
       }),
     list: protectedProcedure
       .input(searchVideoSchema)
@@ -97,20 +97,22 @@ export const appRouter = router({
         const db = await getDb();
         if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
 
-        let query = db.select().from(videos).where(eq(videos.userId, ctx.user.id));
-
+        const conditions = [eq(videos.userId, ctx.user.id)];
+        
         if (input.programName) {
-          query = query.where(like(videos.programName, `%${input.programName}%`));
+          conditions.push(like(videos.programName, `%${input.programName}%`));
         }
         if (input.channel) {
-          query = query.where(eq(videos.channel, input.channel));
+          conditions.push(eq(videos.channel, input.channel));
         }
         if (input.programType) {
-          query = query.where(eq(videos.programType, input.programType));
+          conditions.push(eq(videos.programType, input.programType));
         }
         if (input.hdNumber) {
-          query = query.where(eq(videos.hdNumber, input.hdNumber));
+          conditions.push(eq(videos.hdNumber, input.hdNumber));
         }
+        
+        let query = db.select().from(videos).where(and(...conditions));
 
         const total = await db.select({ count: videos.id }).from(videos).where(eq(videos.userId, ctx.user.id));
         const offset = (input.page - 1) * input.limit;
@@ -134,12 +136,12 @@ export const appRouter = router({
       .input(z.object({ id: z.number(), ...updateVideoSchema.shape }))
       .mutation(async ({ ctx, input }) => {
         const { id, ...data } = input;
-        return await updateVideo(ctx.user.id, id, data);
+        return await updateVideo(id, data);
       }),
     delete: protectedProcedure
       .input(z.object({ id: z.number() }))
       .mutation(async ({ ctx, input }) => {
-        return await deleteVideo(ctx.user.id, input.id);
+        return await deleteVideo(input.id);
       }),
   }),
 
@@ -152,28 +154,36 @@ export const appRouter = router({
         return await listUserPermissions(ctx.user.id);
       }),
       invite: protectedProcedure
-        .input(z.object({ email: z.string().email(), permission: z.enum(["viewer", "editor", "admin"]) }))
+        .input(z.object({ email: z.string().email(), permissionLevel: z.enum(["viewer", "editor", "admin"]) }))
         .mutation(async ({ ctx, input }) => {
           if (ctx.user.role !== "admin") {
             throw new TRPCError({ code: "FORBIDDEN" });
           }
-          return await createUserInvitation(ctx.user.id, input.email, input.permission);
+          return await createUserInvitation(ctx.user.id, input.email, input.permissionLevel);
         }),
       updatePermission: protectedProcedure
-        .input(z.object({ userId: z.number(), permission: z.enum(["viewer", "editor", "admin"]) }))
+        .input(z.object({ permissionId: z.number(), permissionLevel: z.enum(["viewer", "editor", "admin"]) }))
         .mutation(async ({ ctx, input }) => {
           if (ctx.user.role !== "admin") {
             throw new TRPCError({ code: "FORBIDDEN" });
           }
-          return await updateUserPermission(ctx.user.id, input.userId, input.permission);
+          const db = await getDb();
+          if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+          const perm = await db.select().from(userPermissions).where(eq(userPermissions.id, input.permissionId)).limit(1);
+          if (perm.length === 0) throw new TRPCError({ code: "NOT_FOUND" });
+          return await updateUserPermission(ctx.user.id, perm[0].userId, input.permissionLevel);
         }),
       remove: protectedProcedure
-        .input(z.object({ userId: z.number() }))
+        .input(z.object({ permissionId: z.number() }))
         .mutation(async ({ ctx, input }) => {
           if (ctx.user.role !== "admin") {
             throw new TRPCError({ code: "FORBIDDEN" });
           }
-          return await deleteUserPermission(ctx.user.id, input.userId);
+          const db = await getDb();
+          if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+          const perm = await db.select().from(userPermissions).where(eq(userPermissions.id, input.permissionId)).limit(1);
+          if (perm.length === 0) throw new TRPCError({ code: "NOT_FOUND" });
+          return await deleteUserPermission(ctx.user.id, perm[0].userId);
         }),
     }),
     invitations: router({

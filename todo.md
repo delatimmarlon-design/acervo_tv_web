@@ -120,3 +120,20 @@
 - [ ] Implement user profile dropdown menu
 - [ ] Resolve TypeScript errors in server/routers.ts
 - [ ] Add tests for auth UX flows
+
+
+## Advanced Import System
+- [ ] Add programSchedule table to schema (days of week for each program)
+- [ ] Add importAlerts table for inconsistencies and missing episodes
+- [ ] Create procedures for file parsing and validation
+- [ ] Implement day-of-week validation logic
+- [ ] Implement gap detection algorithm
+- [ ] Create ImportPanel component with drag & drop
+- [ ] Implement file name parser (PROGRAMA DD-MM-AAAA.mp4)
+- [ ] Create day-of-week selection dialog
+- [ ] Implement inconsistency detection and alerts
+- [ ] Implement gap detection and alerts
+- [ ] Add disk space monitoring (alert when <500GB)
+- [ ] Remove "Novo Vídeo" button (import-only mode)
+- [ ] Create alerts dashboard
+- [ ] Test import workflow end-to-end
