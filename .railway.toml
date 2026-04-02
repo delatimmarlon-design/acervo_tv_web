@@ -1,8 +1,5 @@
 [build]
 builder = "nixpacks"
-buildCommand = "pnpm install --frozen-lockfile && pnpm build"
 
 [deploy]
-startCommand = "bash start.sh"
-restartPolicyType = "on_failure"
-restartPolicyMaxRetries = 5
+startCommand = "pnpm start"
